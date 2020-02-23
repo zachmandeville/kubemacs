@@ -1,0 +1,8 @@
+#+TITLE: Lightning Fast Tilt Frontend Development
+#+AUTHOR: Zach Mandeville
+
+* Purpose
+Investigate tilt's demo frontend repo to see how lightning fast it is to develop on it.  Then compare its configurations to apisnoop, to see why the webapp dev for snoop is so slow.
+* Our Setup
+** Startup Script
+** Tiltfile
