@@ -1,3 +1,4 @@
+# -*- ii: y; -*-
 #+TITLE: Lightning Fast Tilt Frontend Development
 #+AUTHOR: Zach Mandeville
 
@@ -5,4 +6,114 @@
 Investigate tilt's demo frontend repo to see how lightning fast it is to develop on it.  Then compare its configurations to apisnoop, to see why the webapp dev for snoop is so slow.
 * Our Setup
 ** Startup Script
+   We started up our cluster with kubemacs, apisnoop, and tilt's frontend demo, using this script
+   #+NAME: Cluster Startup Script
+   #+begin_src shell
+ KUBEMACS_USER=zz
+ KUBEMACS_IMAGE=kubemacs/kubemacs:latest
+ KUBEMACS_CONTAINER=kubemacs-docker-init
+ docker pull $KUBEMACS_IMAGE
+ docker run \
+  --name $KUBEMACS_CONTAINER \
+  -e KUBEMACS_IMAGE=$KUBEMACS_IMAGE \
+  -e HOST_UID="$(id -u)" \
+  -e KUBEMACS_GIT_EMAIL='zz@ii.coop' \
+  -e KUBEMACS_GIT_NAME='Zach Mandeville' \
+  -e KUBEMACS_TIMEZONE='Pacific/Aukland' \
+  -e KUBEMACS_HOST_KUBECONFIG_NAME="kind-${KUBEMACS_USER}.kubemacs.configname" \
+  -e KIND_LOCAL_REGISTRY_ENABLE="true" \
+  -e KIND_LOCAL_REGISTRY_NAME="kind-registry" \
+  -e KIND_LOCAL_REGISTRY_PORT="5000" \
+  -e KUBEMACS_KIND_NAME="${KUBEMACS_USER}.kubemacs.kindname" \
+  -e KUBEMACS_INIT_DEFAULT_REPOS='https://github.com/cncf/apisnoop https://github.com/windmilleng/tilt-frontend-demo.git https://github.com/zachmandeville/kubemacs.git' \
+  -e KUBEMACS_INIT_DEFAULT_REPOS_FOLDER='Projects' \
+  -e KUBEMACS_INIT_DEFAULT_DIR='Projects/kubemacs' \
+  -e KUBEMACS_INIT_ORG_FILE='Projects/kubemacs/org/tilt/frontend-development/index.org' \
+  -e KUBEMACS_INIT_DEBUG=true \
+  --user root \
+  --network host \
+  -it \
+  --rm \
+  --privileged \
+  -v "$HOME/.kube":/tmp/.kube \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  $KUBEMACS_IMAGE \
+  docker-init.sh
+   #+end_src
+   
+   We were then able to attach to our kubemacs-0 pod and are writing this within the cluster.
 ** Tiltfile
+   The tiltfile in the frontend demo is written as so:
+   #+NAME: frontend demo tilt file
+   #+begin_src shell :results code drawer
+  cat ~/Projects/tilt-frontend-demo/Tiltfile 
+   #+end_src
+
+   #+RESULTS: frontend demo tilt file
+   :results:
+   repo = local_git_repo('.')
+
+   k8s_yaml('serve.yaml')
+
+   # Start with a base Dockerfile with none of our source code,
+   # and an entry point that starts a server.
+
+   docker_build('tilt-frontend-demo', '.',
+     live_update=[
+       # when package.json changes, we need to do a full build
+       fall_back_on(['package.json', 'package-lock.json']),
+       # Map the local source code into the container under /src
+       sync('.', '/src'),
+     ])
+
+   k8s_resource('tilt-frontend-demo', port_forwards=3000)
+   :end:
+   
+  Seems simple and straightforward! 
+* Starting up Frontend Demo
+** Tilt Up
+  We can bring up the demo with tilt up
+  #+NAME: Tilt Up
+  #+begin_src tmate :dir "~/Projects/tilt-frontend-demo/"
+  tilt up --host 0.0.0.0
+  #+end_src
+  
+  This command will start a right eye, then run tilt up in our demo folder.  I can track the progress of it within my right eye.
+  
+** Forward Ports 
+   When we tilt up, it creates a service accessible at localhost:3000, but this is local to the tilt-frontend-demo pod.  We need to port forward from our machine to that pod in the cluster to be able to view the demo on our browser.
+
+However, I am doing this work on a remote machine, so I will also need to portforward from my local machine to the remote.
+
+First we get our pods
+
+  #+begin_src shell
+ kubectl get pods | grep tilt
+  #+end_src
+
+  #+RESULTS:
+  #+begin_example
+  tilt-frontend-demo-564b6478c8-fcjz7   1/1     Running   0          9m19s
+  #+end_example
+  
+  We'll copy that pod name, and then in the remote machine portforwward using kubectl
+  
+  #+NOTE: this should not be executed in the org file, but copied and run on my machine
+  #+begin_example shell
+  kubectl port-forward pods/tilt-frontend-demo-564b6478c8-fcjz7 3000:3000 
+  #+end_example
+  
+  Now I can access the service on my remote machine.  If I port forward from my local machine to my remote:
+  #+begin_example shell
+  ssh -L 127.0.0.1:3000:localhost:3000 work -N -v 
+  #+end_example
+  I can access the react site on my local-est of local browsers.
+* Make changes to the site
+  So I should be able to adjust the code in the tilt-frontend-demo src folder and see it update lightning fast.  Let's try it!
+  
+  I find that when I make a change, it starts a build but is missing a compile step.  And so it stays stuck in a 'building image' stage, and no change is reflected.   This doesn't seem right, and so I brought up the issue in the #tilt kubernetes slack.
+
+
+  
+  
+
